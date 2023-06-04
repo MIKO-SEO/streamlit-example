@@ -1,38 +1,57 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
 import streamlit as st
+import pytesseract
+from google.cloud import translate_v2 as translate
 
-"""
-# Welcome to Streamlit!
+# Set up Google Cloud Translation API credentials
+translate_client = translate.Client()
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
+# Set up Tesseract OCR engine
+pytesseract.pytesseract.tesseract_cmd = 'path/to/tesseract'
 
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+def translate_text(text, target_lang):
+    # Translate text using Google Cloud Translation API
+    translation = translate_client.translate(text, target_language=target_lang)
+    return translation['translatedText']
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+def extract_text_from_image(image):
+    # Use Tesseract OCR to extract text from manga page image
+    text = pytesseract.image_to_string(image)
+    return text
 
+def process_manga_chapter(manga_images, target_lang):
+    translated_chapter = []
+    
+    for image in manga_images:
+        # Extract text from manga page image
+        text = extract_text_from_image(image)
+        
+        # Translate the extracted text
+        translated_text = translate_text(text, target_lang)
+        
+        # Append the translated text to the translated chapter
+        translated_chapter.append(translated_text)
+    
+    return translated_chapter
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
-
-    Point = namedtuple('Point', 'x y')
-    data = []
-
-    points_per_turn = total_points / num_turns
-
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
-
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+# Streamlit app
+def main():
+    st.title("Auto Manga Translation Tool")
+    st.write("Upload a manga chapter to translate:")
+    
+    uploaded_files = st.file_uploader("Upload images", accept_multiple_files=True)
+    target_language = st.selectbox("Select target language", ["English", "Spanish", "French"])
+    
+    if st.button("Translate"):
+        if uploaded_files is not None:
+            manga_images = [pytesseract.image.load_img(file) for file in uploaded_files]
+            translated_chapter = process_manga_chapter(manga_images, target_language)
+            
+            st.write("Translated Chapter:")
+            for page_num, page_text in enumerate(translated_chapter, start=1):
+                st.subheader(f"Page {page_num}")
+                st.write(page_text)
+        else:
+            st.warning("Please upload manga images.")
+    
+if __name__ == '__main__':
+    main()
